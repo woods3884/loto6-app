@@ -197,3 +197,51 @@ if os.path.exists(pdf_file_path):
         b64_pdf = base64.b64encode(pdf_data).decode("utf-8")
         href = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{pdf_file_path}">📄 PDFレポートをダウンロード</a>'
         st.markdown(href, unsafe_allow_html=True)
+
+import random
+
+st.markdown("---")
+st.subheader("🎲 毎回違うロジックでおすすめ数字を自動生成")
+
+# --- 各ロジック定義 ---
+def generate_from_frequent():
+    return sorted(random.sample(freq.head(10).index.tolist(), 6))
+
+def generate_from_unused():
+    if len(unused) >= 6:
+        return sorted(random.sample(unused, 6))
+    else:
+        return sorted(random.sample(range(1, 44), 6))
+
+def generate_balanced_odd_even():
+    odd = [n for n in range(1, 44) if n % 2 == 1]
+    even = [n for n in range(1, 44) if n % 2 == 0]
+    return sorted(random.sample(odd, 3) + random.sample(even, 3))
+
+def generate_with_consecutive():
+    base = random.randint(1, 42)
+    pair = [base, base + 1]
+    others = random.sample([n for n in range(1, 44) if n not in pair], 4)
+    return sorted(pair + others)
+
+def generate_with_common_pair():
+    pair = pair_counter.most_common(1)[0][0]
+    others = random.sample([n for n in range(1, 44) if n not in pair], 4)
+    return sorted(list(pair) + others)
+
+# --- ロジック選択 ---
+strategies = [
+    generate_from_frequent,
+    generate_from_unused,
+    generate_balanced_odd_even,
+    generate_with_consecutive,
+    generate_with_common_pair,
+]
+
+selected_strategy = random.choice(strategies)
+suggested_numbers = selected_strategy()
+
+# --- 表示 ---
+st.markdown("#### 💡 おすすめの数字（ロジックランダム）")
+st.write("今回のロジック：", selected_strategy.__name__)
+st.success("、".join(map(str, suggested_numbers)))
