@@ -6,7 +6,12 @@ import seaborn as sns
 import matplotlib.font_manager as fm
 import matplotlib
 import matplotlib
-matplotlib.rcParams['font.family'] = 'Noto Sans CJK JP'
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+
+font_path = "ipaexg.ttf"
+font_prop = fm.FontProperties(fname=font_path)
+matplotlib.rcParams['font.family'] = font_prop.get_name()
 import base64
 import os
 from datetime import datetime
