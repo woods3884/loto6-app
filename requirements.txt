@@ -1,3 +1,6 @@
 streamlit
+matplotlib
 pandas
-requests
+numpy
+plotly
+# 他に使っているパッケージがあればここに追加
