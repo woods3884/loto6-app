@@ -201,7 +201,7 @@ if os.path.exists(pdf_file_path):
 import random
 
 st.markdown("---")
-st.subheader("🎲 毎回違うロジックでおすすめ数字を自動生成")
+st.subheader("🎲 毎回違うロジックでおすすめ数字を自動生成（5口）")
 
 # --- 各ロジック定義 ---
 def generate_from_frequent():
@@ -229,7 +229,7 @@ def generate_with_common_pair():
     others = random.sample([n for n in range(1, 44) if n not in pair], 4)
     return sorted(list(pair) + others)
 
-# --- ロジック選択 ---
+# --- ロジックリスト ---
 strategies = [
     generate_from_frequent,
     generate_from_unused,
@@ -238,10 +238,15 @@ strategies = [
     generate_with_common_pair,
 ]
 
-selected_strategy = random.choice(strategies)
-suggested_numbers = selected_strategy()
+# --- 5口分の数字生成 ---
+suggested_numbers_list = []
+for _ in range(5):
+    strategy = random.choice(strategies)
+    numbers = strategy()
+    suggested_numbers_list.append((strategy.__name__, numbers))
 
 # --- 表示 ---
-st.markdown("#### 💡 おすすめの数字（ロジックランダム）")
-st.write("今回のロジック：", selected_strategy.__name__)
-st.success("、".join(map(str, suggested_numbers)))
+for i, (logic_name, numbers) in enumerate(suggested_numbers_list, 1):
+    st.markdown(f"#### 🎯 {i}口目（ロジック：`{logic_name}`）")
+    st.success("、".join(map(str, numbers)))
+
