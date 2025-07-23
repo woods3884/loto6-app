@@ -6,8 +6,7 @@ import seaborn as sns
 import matplotlib.font_manager as fm
 import matplotlib
 import matplotlib
-matplotlib.rcParams['font.family'] = 'sans-serif'
-matplotlib.rcParams['font.sans-serif'] = ['Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', 'MS Gothic']
+matplotlib.rcParams['font.family'] = 'Noto Sans CJK JP'
 import base64
 import os
 from datetime import datetime
