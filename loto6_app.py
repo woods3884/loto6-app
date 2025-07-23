@@ -199,9 +199,10 @@ if os.path.exists(pdf_file_path):
         st.markdown(href, unsafe_allow_html=True)
 
 import random
+import streamlit as st
 
 st.markdown("---")
-st.subheader("🎲 おすすめ数字の自動生成（ロジック選択＋5口分）")
+st.subheader("🎲 おすすめ数字自動生成")
 
 # --- 各ロジック定義 ---
 def generate_from_frequent():
@@ -229,24 +230,24 @@ def generate_with_common_pair():
     others = random.sample([n for n in range(1, 44) if n not in pair], 4)
     return sorted(list(pair) + others)
 
-# --- ロジック一覧と表示名 ---
-strategy_dict = {
-    "頻出数字から選ぶ": generate_from_frequent,
-    "未出数字から選ぶ": generate_from_unused,
-    "奇数偶数バランス": generate_balanced_odd_even,
-    "連続数字を含める": generate_with_consecutive,
-    "よく出るペアを使う": generate_with_common_pair,
+# --- ロジック名と関数の辞書 ---
+strategies = {
+    "頻繁に出てくる数字から選ぶ": generate_from_frequent,
+    "まだ出ていない数字から選ぶ": generate_from_unused,
+    "奇数・偶数を半々にする": generate_balanced_odd_even,
+    "連続する数字を含める": generate_with_consecutive,
+    "よく一緒に出るペアを含める": generate_with_common_pair,
 }
 
-# --- セレクトボックスでロジックを選択 ---
-selected_label = st.selectbox("🧠 ロジックを選択してください", list(strategy_dict.keys()))
-selected_strategy = strategy_dict[selected_label]
+# --- UI選択 ---
+selected_name = st.selectbox("🧠 ロジックを選択してください", list(strategies.keys()))
+generate_btn = st.button("🔁 数字を再生成")
 
-# --- ボタンで再生成 ---
-if st.button("🔁 5口分の数字を再生成"):
-    st.markdown("#### 💡 おすすめの数字（5口分）")
-    for i in range(5):
-        numbers = selected_strategy()
-        st.success(f"口{i+1}: " + "、".join(map(str, numbers)))
+if generate_btn:
+    st.markdown(f"#### 💡 おすすめの数字（{selected_name}）")
+    for i in range(1, 6):  # 5口分
+        numbers = strategies[selected_name]()
+        st.success(f"{i}口目: " + "、".join(map(str, numbers)))
+
 
 
