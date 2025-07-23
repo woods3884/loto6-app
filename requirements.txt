@@ -1,6 +1,6 @@
 streamlit
-matplotlib
 pandas
 numpy
+matplotlib
 plotly
-# 他に使っているパッケージがあればここに追加
+
