@@ -1,0 +1,1 @@
+web: streamlit run loto6_app.py
