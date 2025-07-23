@@ -201,7 +201,7 @@ if os.path.exists(pdf_file_path):
 import random
 
 st.markdown("---")
-st.subheader("🎲 おすすめ数字自動生成")
+st.subheader("🎲 おすすめ数字の自動生成（ロジック選択＋5口分）")
 
 # --- 各ロジック定義 ---
 def generate_from_frequent():
@@ -229,26 +229,24 @@ def generate_with_common_pair():
     others = random.sample([n for n in range(1, 44) if n not in pair], 4)
     return sorted(list(pair) + others)
 
-# --- ロジック辞書（セレクトボックス表示用） ---
-strategies = {
+# --- ロジック一覧と表示名 ---
+strategy_dict = {
     "頻出数字から選ぶ": generate_from_frequent,
-    "未出数字を優先": generate_from_unused,
-    "奇数・偶数バランス重視": generate_balanced_odd_even,
+    "未出数字から選ぶ": generate_from_unused,
+    "奇数偶数バランス": generate_balanced_odd_even,
     "連続数字を含める": generate_with_consecutive,
-    "よく出るペアを含める": generate_with_common_pair,
-    "ランダム（自動選択）": None,  # ランダムで選ぶ
+    "よく出るペアを使う": generate_with_common_pair,
 }
 
-# --- セレクトボックスでロジック選択 ---
-selected_strategy_name = st.selectbox("🧠 ロジックを選択してください", list(strategies.keys()))
+# --- セレクトボックスでロジックを選択 ---
+selected_label = st.selectbox("🧠 ロジックを選択してください", list(strategy_dict.keys()))
+selected_strategy = strategy_dict[selected_label]
 
-# --- ボタンで毎回再生成 ---
-if st.button("🔁 数字を再生成"):
-    if selected_strategy_name == "ランダム（自動選択）":
-        strategy_func = random.choice(list(strategies.values())[:-1])  # 最後のNone以外から選ぶ
-    else:
-        strategy_func = strategies[selected_strategy_name]
-    suggested_numbers = strategy_func()
-    st.markdown(f"#### 💡 おすすめの数字（{selected_strategy_name}）")
-    st.success("、".join(map(str, suggested_numbers)))
+# --- ボタンで再生成 ---
+if st.button("🔁 5口分の数字を再生成"):
+    st.markdown("#### 💡 おすすめの数字（5口分）")
+    for i in range(5):
+        numbers = selected_strategy()
+        st.success(f"口{i+1}: " + "、".join(map(str, numbers)))
+
 
