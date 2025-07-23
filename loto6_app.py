@@ -201,7 +201,7 @@ if os.path.exists(pdf_file_path):
 import random
 
 st.markdown("---")
-st.subheader("🎲 毎回違うロジックでおすすめ数字を自動生成（5口）")
+st.subheader("🎲 おすすめ数字自動生成")
 
 # --- 各ロジック定義 ---
 def generate_from_frequent():
@@ -229,93 +229,26 @@ def generate_with_common_pair():
     others = random.sample([n for n in range(1, 44) if n not in pair], 4)
     return sorted(list(pair) + others)
 
-# --- ロジックリスト ---
-strategies = [
-    generate_from_frequent,
-    generate_from_unused,
-    generate_balanced_odd_even,
-    generate_with_consecutive,
-    generate_with_common_pair,
-]
-
-# --- 5口分の数字生成 ---
-suggested_numbers_list = []
-for _ in range(5):
-    strategy = random.choice(strategies)
-    numbers = strategy()
-    suggested_numbers_list.append((strategy.__name__, numbers))
-
-# --- 表示 ---
-for i, (logic_name, numbers) in enumerate(suggested_numbers_list, 1):
-    st.markdown(f"#### 🎯 {i}口目（ロジック：`{logic_name}`）")
-    st.success("、".join(map(str, numbers)))
-
-import random
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from io import BytesIO
-
-st.markdown("---")
-st.subheader("🎲 毎回違うロジックでおすすめ数字を自動生成")
-
-# --- 各ロジック定義 ---
-def generate_from_frequent():
-    return sorted(random.sample(freq.head(10).index.tolist(), 6))
-
-def generate_from_unused():
-    if len(unused) >= 6:
-        return sorted(random.sample(unused, 6))
-    else:
-        return sorted(random.sample(range(1, 44), 6))
-
-def generate_balanced_odd_even():
-    odd = [n for n in range(1, 44) if n % 2 == 1]
-    even = [n for n in range(1, 44) if n % 2 == 0]
-    return sorted(random.sample(odd, 3) + random.sample(even, 3))
-
-def generate_with_consecutive():
-    base = random.randint(1, 42)
-    pair = [base, base + 1]
-    others = random.sample([n for n in range(1, 44) if n not in pair], 4)
-    return sorted(pair + others)
-
-def generate_with_common_pair():
-    pair = pair_counter.most_common(1)[0][0]
-    others = random.sample([n for n in range(1, 44) if n not in pair], 4)
-    return sorted(list(pair) + others)
-
+# --- ロジック辞書（セレクトボックス表示用） ---
 strategies = {
     "頻出数字から選ぶ": generate_from_frequent,
     "未出数字を優先": generate_from_unused,
     "奇数・偶数バランス重視": generate_balanced_odd_even,
     "連続数字を含める": generate_with_consecutive,
     "よく出るペアを含める": generate_with_common_pair,
+    "ランダム（自動選択）": None,  # ランダムで選ぶ
 }
 
-selected_strategy_name = st.selectbox("🧠 ロジックを選択", list(strategies.keys()))
-generate_button = st.button("🔁 新しいおすすめ数字を生成")
+# --- セレクトボックスでロジック選択 ---
+selected_strategy_name = st.selectbox("🧠 ロジックを選択してください", list(strategies.keys()))
 
-if generate_button:
-    results = []
-    for _ in range(5):  # 5口分生成
-        numbers = strategies[selected_strategy_name]()
-        results.append(numbers)
+# --- ボタンで毎回再生成 ---
+if st.button("🔁 数字を再生成"):
+    if selected_strategy_name == "ランダム（自動選択）":
+        strategy_func = random.choice(list(strategies.values())[:-1])  # 最後のNone以外から選ぶ
+    else:
+        strategy_func = strategies[selected_strategy_name]
+    suggested_numbers = strategy_func()
+    st.markdown(f"#### 💡 おすすめの数字（{selected_strategy_name}）")
+    st.success("、".join(map(str, suggested_numbers)))
 
-    st.markdown("#### 💡 今回のおすすめ数字（5口）")
-    for i, nums in enumerate(results, 1):
-        st.success(f"{i}口目: " + "、".join(map(str, nums)))
-
-    # PDF生成オプション
-    st.markdown("### 💾 おすすめ数字をPDFに保存")
-    if st.button("📄 PDFを作成してダウンロード"):
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        c.setFont("Helvetica", 14)
-        c.drawString(50, 800, f"おすすめ数字（ロジック: {selected_strategy_name}）")
-        for i, nums in enumerate(results, 1):
-            c.drawString(50, 770 - 30 * i, f"{i}口目: {'、'.join(map(str, nums))}")
-        c.save()
-
-        b64 = base64.b64encode(buffer.getvalue()).decode()
-        href = f'<a href="data:application/pdf;base64,{b64}" download="suggested_numbers.pdf">📄 ダウンロードはこちら</a>'
-        st.markdown(href, unsafe_allow_html=True)
