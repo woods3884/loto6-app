@@ -1,20 +1,40 @@
-import pandas as pd
-import os
+def generate_pdf_report(df, month):
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
-# 元CSVを読み込み（SHIFT-JIS / cp932 対応）
-df = pd.read_csv("LOTO6_ALL.csv", encoding="cp932")
+    # 📌 列名を num1～num6 にリネーム（元データが「数字１」などの場合）
+    rename_dict = {
+        "数字１": "num1",
+        "数字２": "num2",
+        "数字３": "num3",
+        "数字４": "num4",
+        "数字５": "num5",
+        "数字６": "num6",
+    }
+    df = df.rename(columns=rename_dict)
 
-# 「抽選日」列をdatetime型に変換（列名は必ず一致している必要があります）
-df["抽選日"] = pd.to_datetime(df["抽選日"])
+    # すでにPDFが存在する場合はスキップ
+    file_path = f"{month}_report.pdf"
+    if os.path.exists(file_path):
+        return
 
-# 出力先フォルダを作成
-output_folder = "data"
-os.makedirs(output_folder, exist_ok=True)
+    # フォント登録
+    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
 
-# 年月単位でグループ化して保存（例: 2025-07.csv）
-for (year, month), group in df.groupby([df["抽選日"].dt.year, df["抽選日"].dt.month]):
-    filename = f"{year}-{month:02d}.csv"
-    filepath = os.path.join(output_folder, filename)
-    group.to_csv(filepath, index=False)
+    c = canvas.Canvas(file_path, pagesize=A4)
+    width, height = A4
+    c.setFont('HeiseiKakuGo-W5', 14)
+    c.drawString(50, height - 50, f"ロト6 数字出現レポート（{month}）")
 
-print("✅ 月別CSVの保存が完了しました。")
+    # 頻出数字トップ10
+    all_numbers = pd.Series(df[[f"num{i}" for i in range(1, 7)]].values.ravel())
+    freq = all_numbers.value_counts().sort_values(ascending=False)
+
+    c.setFont('HeiseiKakuGo-W5', 12)
+    c.drawString(50, height - 90, "頻出数字トップ10：")
+    for i, (num, count) in enumerate(freq.head(10).items()):
+        c.drawString(60, height - 110 - i * 20, f"{i+1}位: {num}（{count}回）")
+
+    c.save()
