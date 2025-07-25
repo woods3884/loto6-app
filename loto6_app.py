@@ -138,6 +138,7 @@ st.markdown("### 📄 PDFレポートダウンロード")
 
 # 月別CSV一覧を収集
 csv_folder = "data"
+os.makedirs(csv_folder, exist_ok=True)  # ← これを追加
 csv_files = [f for f in os.listdir(csv_folder) if f.endswith(".csv")]
 months = sorted([f.replace(".csv", "") for f in csv_files], reverse=True)
 
