@@ -5,6 +5,9 @@ matplotlib
 seaborn
 plotly
 reportlab
+chardet
+
+
 
 
 
