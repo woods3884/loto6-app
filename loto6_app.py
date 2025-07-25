@@ -1,127 +1,145 @@
-import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-import seaborn as sns
-import matplotlib.font_manager as fm
-import matplotlib
-import base64
+import pandas as pd
+import numpy as np
 import os
-import random
 from datetime import datetime
-from collections import Counter
-from itertools import combinations
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+import random
 
-# --- フォント設定 ---
-font_path = "ipaexg.ttf"
-font_prop = fm.FontProperties(fname=font_path)
-matplotlib.rcParams['font.family'] = font_prop.get_name()
-plt.rcParams['font.family'] = font_prop.get_name()
+# 日本語フォントの登録
+pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
 
-# --- PDF保存用フォルダ作成 ---
-os.makedirs("data", exist_ok=True)
+# データフォルダの指定
+data_folder = "data"
 
-# --- 📄 PDF生成関数 ---
-def generate_pdf_report(df, month):
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+# ページタイトル
+st.title("📄 PDFレポートダウンロード")
 
-    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
-    file_path = f"{month}_report.pdf"
-    if os.path.exists(file_path):
-        return  # すでに存在すれば生成しない
+# 月の選択肢を取得
+def get_available_months():
+    if not os.path.exists(data_folder):
+        return []
+    files = os.listdir(data_folder)
+    months = [f.replace(".csv", "") for f in files if f.endswith(".csv")]
+    months.sort(reverse=True)
+    return months
 
-    # 列名変換（日本語→英語）
+# PDFレポート生成関数
+def generate_pdf_report(df, selected_month):
+    file_name = f"report_{selected_month}.pdf"
+    c = canvas.Canvas(file_name, pagesize=A4)
+    c.setFont("HeiseiKakuGo-W5", 12)
+
+    # 見出し
+    c.drawString(100, 800, f"ロト6 {selected_month} 出現数字レポート")
+
+    # 列名リネーム
     rename_dict = {
-        "数字1": "num1", "数字2": "num2", "数字3": "num3",
-        "数字4": "num4", "数字5": "num5", "数字6": "num6"
+        "数字１": "num1",
+        "数字２": "num2",
+        "数字３": "num3",
+        "数字４": "num4",
+        "数字５": "num5",
+        "数字６": "num6",
     }
     df = df.rename(columns=rename_dict)
 
-    c = canvas.Canvas(file_path, pagesize=A4)
-    width, height = A4
-    c.setFont('HeiseiKakuGo-W5', 14)
-    c.drawString(50, height - 50, f"ロト6 数字出現レポート（{month}）")
-
+    # 頻出数字の集計
     all_numbers = pd.Series(df[[f"num{i}" for i in range(1, 7)]].values.ravel())
-    freq = all_numbers.value_counts().sort_values(ascending=False)
-    c.setFont('HeiseiKakuGo-W5', 12)
-    c.drawString(50, height - 90, "頻出数字トップ10：")
-    for i, (num, count) in enumerate(freq.head(10).items()):
-        c.drawString(60, height - 110 - i * 20, f"{i+1}位: {num}（{count}回）")
+    freq = all_numbers.value_counts().sort_index()
+
+    y = 760
+    for num, count in freq.items():
+        c.drawString(100, y, f"{int(num):02d}：{count}回")
+        y -= 20
 
     c.save()
+    return file_name
 
-# --- 🎯 おすすめ数字生成ロジック ---
-def generate_numbers(df_all, logic="頻出上位30個"):
-    # 列名が「数字1〜6」の場合に「num1〜num6」へリネーム
-    rename_dict = {
-        "数字1": "num1", "数字2": "num2", "数字3": "num3",
-        "数字4": "num4", "数字5": "num5", "数字6": "num6",
-    }
-    df_all = df_all.rename(columns=rename_dict)
+# 月選択
+months = get_available_months()
+selected_month = st.selectbox("📅 表示したい月を選んでください", months)
 
+if selected_month:
+    csv_path = os.path.join(data_folder, f"{selected_month}.csv")
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path, encoding="cp932")
+        pdf_file = generate_pdf_report(df, selected_month)
+        with open(pdf_file, "rb") as f:
+            st.download_button(
+                label=f"📥 {selected_month} report.pdf をダウンロード",
+                data=f,
+                file_name=pdf_file,
+                mime="application/pdf"
+            )
+    else:
+        st.warning(f"⚠️ {csv_path} は存在しません。")
+else:
+    st.info("🔽 月を選択するとPDFが生成されます")
+
+# --------------------------------------------
+# 🔁 おすすめ数字自動生成
+# --------------------------------------------
+st.markdown("""
+---
+## 🎯 過去すべての出現傾向からおすすめ数字を自動生成
+""")
+
+# 過去すべてのCSVを結合
+def load_all_data():
+    all_dfs = []
+    for file in os.listdir(data_folder):
+        if file.endswith(".csv"):
+            df = pd.read_csv(os.path.join(data_folder, file), encoding="cp932")
+            all_dfs.append(df)
+    return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
+
+# ロジック選択肢
+def generate_numbers(df_all, logic="頻出順"):
     all_numbers = pd.Series(df_all[[f"num{i}" for i in range(1, 7)]].values.ravel())
     freq = all_numbers.value_counts().sort_values(ascending=False)
-
-    numbers = []
-    if logic == "頻出上位30個":
-        pool = list(freq.head(30).index)
-    elif logic == "ランダム全数字":
-        pool = list(range(1, 44))
-    elif logic == "最近未出数字から":
-        pool = list(freq.tail(30).index)
+    top_numbers = list(freq.index)
+    if logic == "頻出順":
+        return [sorted(random.sample(top_numbers[:20], 6)) for _ in range(5)]
+    elif logic == "ランダム":
+        return [sorted(random.sample(range(1, 44), 6)) for _ in range(5)]
     else:
-        pool = list(range(1, 44))
+        return [sorted(random.sample(top_numbers[:30], 6)) for _ in range(5)]
 
-    for _ in range(5):
-        numbers.append(sorted(random.sample(pool, 6)))
+# ロジック選択
+logic = st.selectbox("🔢 ロジックを選んでください", ["頻出順", "ランダム"])
 
-    return numbers
-
-# --- Streamlit UI ---
-st.title("🎯 ロト6 おすすめ数字自動生成ツール")
-
-# 月別CSV一覧を収集
-csv_folder = "data"
-os.makedirs(csv_folder, exist_ok=True)
-csv_files = [f for f in os.listdir(csv_folder) if f.endswith(".csv")]
-months = sorted([f.replace(".csv", "") for f in csv_files], reverse=True)
-
-selected_month = st.selectbox("📅 使用するデータ（月）を選んでください", ["全期間"] + months)
-logic = st.selectbox("🧠 数字生成ロジックを選択", ["頻出上位30個", "ランダム全数字", "最近未出数字から"])
-
-if st.button("🔁 数字を再生成") or "recommendations" not in st.session_state:
-    if selected_month == "全期間":
-        df_list = []
-        for month_file in csv_files:
-            path = os.path.join(csv_folder, month_file)
-            df = pd.read_csv(path)
-            df_list.append(df)
-        df_all = pd.concat(df_list, ignore_index=True)
-    else:
-        csv_path = os.path.join(csv_folder, f"{selected_month}.csv")
-        df_all = pd.read_csv(csv_path)
-
+# 数字生成とPDFボタン
+if 'recommendations' not in st.session_state:
+    df_all = load_all_data()
+    rename_dict = {
+        "数字１": "num1",
+        "数字２": "num2",
+        "数字３": "num3",
+        "数字４": "num4",
+        "数字５": "num5",
+        "数字６": "num6",
+    }
+    df_all = df_all.rename(columns=rename_dict)
     st.session_state.recommendations = generate_numbers(df_all, logic=logic)
 
-# --- 表示 ---
-st.markdown("### ✅ 今回のおすすめ数字（5口分）")
-for i, nums in enumerate(st.session_state.recommendations, 1):
-    st.write(f"**{i}口目**: {', '.join(map(str, nums))}")
+if st.button("🔁 数字を再生成する"):
+    df_all = load_all_data()
+    rename_dict = {
+        "数字１": "num1",
+        "数字２": "num2",
+        "数字３": "num3",
+        "数字４": "num4",
+        "数字５": "num5",
+        "数字６": "num6",
+    }
+    df_all = df_all.rename(columns=rename_dict)
+    st.session_state.recommendations = generate_numbers(df_all, logic=logic)
 
-# --- 📄 PDFレポートダウンロード ---
-st.markdown("### 📄 PDFレポートダウンロード")
-if selected_month != "全期間":
-    df = pd.read_csv(os.path.join(csv_folder, f"{selected_month}.csv"))
-    generate_pdf_report(df, selected_month)
-    pdf_filename = f"{selected_month}_report.pdf"
-    if os.path.exists(pdf_filename):
-        with open(pdf_filename, "rb") as f:
-            pdf_bytes = f.read()
-            b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
-            pdf_link = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{pdf_filename}">📥 {pdf_filename} をダウンロード</a>'
-            st.markdown(pdf_link, unsafe_allow_html=True)
-    else:
-        st.warning(f"⚠️ {pdf_filename} は見つかりません。")
+if 'recommendations' in st.session_state:
+    st.subheader("🎉 おすすめ数字（5口分）")
+    for idx, row in enumerate(st.session_state.recommendations, 1):
+        st.write(f"第{idx}口：{' '.join(f'{n:02d}' for n in row)}")
