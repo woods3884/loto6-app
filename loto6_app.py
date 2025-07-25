@@ -6,10 +6,10 @@ import matplotlib.font_manager as fm
 import matplotlib
 import base64
 import os
+import random
 from datetime import datetime
 from collections import Counter
 from itertools import combinations
-import random
 
 # --- フォント設定 ---
 font_path = "ipaexg.ttf"
@@ -32,12 +32,18 @@ def generate_pdf_report(df, month):
     if os.path.exists(file_path):
         return  # すでに存在すれば生成しない
 
+    # 列名変換（日本語→英語）
+    rename_dict = {
+        "数字1": "num1", "数字2": "num2", "数字3": "num3",
+        "数字4": "num4", "数字5": "num5", "数字6": "num6"
+    }
+    df = df.rename(columns=rename_dict)
+
     c = canvas.Canvas(file_path, pagesize=A4)
     width, height = A4
     c.setFont('HeiseiKakuGo-W5', 14)
     c.drawString(50, height - 50, f"ロト6 数字出現レポート（{month}）")
 
-    # 頻出数字トップ10
     all_numbers = pd.Series(df[[f"num{i}" for i in range(1, 7)]].values.ravel())
     freq = all_numbers.value_counts().sort_values(ascending=False)
     c.setFont('HeiseiKakuGo-W5', 12)
@@ -47,8 +53,35 @@ def generate_pdf_report(df, month):
 
     c.save()
 
-# --- 📄 PDFレポートダウンロードセクション ---
-st.markdown("### 📄 PDFレポートダウンロード")
+# --- 🎯 おすすめ数字生成ロジック ---
+def generate_numbers(df_all, logic="頻出上位30個"):
+    # 列名が「数字1〜6」の場合に「num1〜num6」へリネーム
+    rename_dict = {
+        "数字1": "num1", "数字2": "num2", "数字3": "num3",
+        "数字4": "num4", "数字5": "num5", "数字6": "num6",
+    }
+    df_all = df_all.rename(columns=rename_dict)
+
+    all_numbers = pd.Series(df_all[[f"num{i}" for i in range(1, 7)]].values.ravel())
+    freq = all_numbers.value_counts().sort_values(ascending=False)
+
+    numbers = []
+    if logic == "頻出上位30個":
+        pool = list(freq.head(30).index)
+    elif logic == "ランダム全数字":
+        pool = list(range(1, 44))
+    elif logic == "最近未出数字から":
+        pool = list(freq.tail(30).index)
+    else:
+        pool = list(range(1, 44))
+
+    for _ in range(5):
+        numbers.append(sorted(random.sample(pool, 6)))
+
+    return numbers
+
+# --- Streamlit UI ---
+st.title("🎯 ロト6 おすすめ数字自動生成ツール")
 
 # 月別CSV一覧を収集
 csv_folder = "data"
@@ -56,11 +89,32 @@ os.makedirs(csv_folder, exist_ok=True)
 csv_files = [f for f in os.listdir(csv_folder) if f.endswith(".csv")]
 months = sorted([f.replace(".csv", "") for f in csv_files], reverse=True)
 
-selected_month = st.selectbox("📅 表示したい月を選んでください", months)
-csv_path = os.path.join(csv_folder, f"{selected_month}.csv")
+selected_month = st.selectbox("📅 使用するデータ（月）を選んでください", ["全期間"] + months)
+logic = st.selectbox("🧠 数字生成ロジックを選択", ["頻出上位30個", "ランダム全数字", "最近未出数字から"])
 
-if os.path.exists(csv_path):
-    df = pd.read_csv(csv_path)
+if st.button("🔁 数字を再生成") or "recommendations" not in st.session_state:
+    if selected_month == "全期間":
+        df_list = []
+        for month_file in csv_files:
+            path = os.path.join(csv_folder, month_file)
+            df = pd.read_csv(path)
+            df_list.append(df)
+        df_all = pd.concat(df_list, ignore_index=True)
+    else:
+        csv_path = os.path.join(csv_folder, f"{selected_month}.csv")
+        df_all = pd.read_csv(csv_path)
+
+    st.session_state.recommendations = generate_numbers(df_all, logic=logic)
+
+# --- 表示 ---
+st.markdown("### ✅ 今回のおすすめ数字（5口分）")
+for i, nums in enumerate(st.session_state.recommendations, 1):
+    st.write(f"**{i}口目**: {', '.join(map(str, nums))}")
+
+# --- 📄 PDFレポートダウンロード ---
+st.markdown("### 📄 PDFレポートダウンロード")
+if selected_month != "全期間":
+    df = pd.read_csv(os.path.join(csv_folder, f"{selected_month}.csv"))
     generate_pdf_report(df, selected_month)
     pdf_filename = f"{selected_month}_report.pdf"
     if os.path.exists(pdf_filename):
@@ -71,68 +125,3 @@ if os.path.exists(csv_path):
             st.markdown(pdf_link, unsafe_allow_html=True)
     else:
         st.warning(f"⚠️ {pdf_filename} は見つかりません。")
-else:
-    st.warning(f"⚠️ {csv_path} が存在しません。")
-
-# --- 🔢 過去すべてのデータからおすすめ数字を自動生成 ---
-st.markdown("---")
-st.subheader("🎯 過去すべての出現傾向からおすすめ数字を自動生成")
-
-# 全CSVを結合
-all_dfs = []
-for file in csv_files:
-    path = os.path.join(csv_folder, file)
-    df_month = pd.read_csv(path)
-    all_dfs.append(df_month)
-
-if all_dfs:
-    df_all = pd.concat(all_dfs, ignore_index=True)
-    df_all[[f"num{i}" for i in range(1, 7)]] = df_all[[f"num{i}" for i in range(1, 7)]].astype(int)
-
-    all_numbers = pd.Series(df_all[[f"num{i}" for i in range(1, 7)]].values.ravel())
-    freq = all_numbers.value_counts().sort_values(ascending=False)
-
-    all_possible = set(range(1, 44))
-    existing = set(freq.index)
-    unused = sorted(all_possible - existing)
-
-    # ロジック定義
-    def generate_from_frequent():
-        return sorted(random.sample(freq.head(10).index.tolist(), 6))
-
-    def generate_from_unused():
-        if len(unused) >= 6:
-            return sorted(random.sample(unused, 6))
-        else:
-            return sorted(random.sample(range(1, 44), 6))
-
-    def generate_balanced_odd_even():
-        odd = [n for n in range(1, 44) if n % 2 == 1]
-        even = [n for n in range(1, 44) if n % 2 == 0]
-        return sorted(random.sample(odd, 3) + random.sample(even, 3))
-
-    def generate_with_consecutive():
-        base = random.randint(1, 42)
-        pair = [base, base + 1]
-        others = random.sample([n for n in range(1, 44) if n not in pair], 4)
-        return sorted(pair + others)
-
-    def generate_random():
-        return sorted(random.sample(range(1, 44), 6))
-
-    logic_options = {
-        "頻出数字から抽出": generate_from_frequent,
-        "未出数字から抽出": generate_from_unused,
-        "奇数偶数バランス型": generate_balanced_odd_even,
-        "連続数字を含める": generate_with_consecutive,
-        "完全ランダム": generate_random
-    }
-
-    selected_logic = st.selectbox("ロジックを選んでください", list(logic_options.keys()))
-    if st.button("🔁 数字を生成"):
-        st.markdown("#### 💡 おすすめ数字（1〜5口）")
-        for i in range(5):
-            numbers = logic_options[selected_logic]()
-            st.success(f"{i+1}口目: " + "、".join(map(str, numbers)))
-else:
-    st.warning("❌ 有効なCSVデータが存在しません。")
