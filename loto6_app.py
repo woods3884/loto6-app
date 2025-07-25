@@ -1,92 +1,96 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.font_manager as fm
+import matplotlib
+import base64
 import os
 import random
+import chardet
 from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
-# データ読み込み（過去すべて）
-DATA_DIR = "data"
-all_files = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
-all_files.sort()
-df_all = pd.concat([pd.read_csv(os.path.join(DATA_DIR, f), encoding="cp932") for f in all_files])
+# --- フォント設定 ---
+font_path = "ipaexg.ttf"
+font_prop = fm.FontProperties(fname=font_path)
+matplotlib.rcParams['font.family'] = font_prop.get_name()
+plt.rcParams['font.family'] = font_prop.get_name()
 
-# --- 列名を統一 ---
-rename_dict = {
-    "数字１": "num1",
-    "数字２": "num2",
-    "数字３": "num3",
-    "数字４": "num4",
-    "数字５": "num5",
-    "数字６": "num6",
-}
-df_all = df_all.rename(columns=rename_dict)
+# --- フォルダ作成 ---
+os.makedirs("data", exist_ok=True)
 
-# --- ページ設定 ---
-st.set_page_config(page_title="ロト6分析ツール", layout="centered")
+# --- chardetでCSV読み込み ---
+def read_csv_with_chardet(path):
+    with open(path, "rb") as f:
+        result = chardet.detect(f.read())
+        encoding = result['encoding']
+    return pd.read_csv(path, encoding=encoding)
 
-st.title("📊 ロト6 出現数字分析ツール")
+# --- おすすめ数字自動生成ロジック ---
+def generate_numbers(df, logic="frequency"):
+    numbers_pool = range(1, 44)
+    if logic == "frequency":
+        all_numbers = pd.Series(df[[f"num{i}" for i in range(1, 7)]].values.ravel())
+        freq = all_numbers.value_counts().sort_values(ascending=False)
+        top_numbers = list(freq.head(20).index)
+        return [sorted(random.sample(top_numbers, 6)) for _ in range(5)]
+    else:
+        return [sorted(random.sample(numbers_pool, 6)) for _ in range(5)]
 
-# --- PDF レポート ダウンロード ---
-st.header("📄 PDFレポートダウンロード")
-month_list = sorted([f.replace(".csv", "") for f in all_files])
-selected_month = st.selectbox("📅 表示したい月を選んでください", month_list)
-
-pdf_path = f"reports/{selected_month}_report.pdf"
-if os.path.exists(pdf_path):
-    with open(pdf_path, "rb") as f:
-        st.download_button(f"{selected_month} のレポートをダウンロード", f, file_name=os.path.basename(pdf_path))
-else:
-    st.warning(f"{pdf_path} は存在しません。")
-
-# --- 過去すべてからおすすめ数字を生成 ---
-st.header("🎯 過去すべての出現傾向からおすすめ数字を自動生成")
-
-def generate_numbers(df, logic="random"):
+# --- PDFレポート生成 ---
+def generate_pdf_report(df, month):
+    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+    file_path = f"{month}_report.pdf"
+    if os.path.exists(file_path):
+        return
+    c = canvas.Canvas(file_path, pagesize=A4)
+    width, height = A4
+    c.setFont('HeiseiKakuGo-W5', 14)
+    c.drawString(50, height - 50, f"ロト6 数字出現レポート（{month}）")
     all_numbers = pd.Series(df[[f"num{i}" for i in range(1, 7)]].values.ravel())
     freq = all_numbers.value_counts().sort_values(ascending=False)
-
-    recommendations = []
-    for _ in range(5):  # 5口生成
-        if logic == "random":
-            numbers = sorted(random.sample(range(1, 44), 6))
-        elif logic == "high_freq":
-            numbers = sorted(freq.head(6).index.tolist())
-        else:
-            numbers = sorted(random.sample(range(1, 44), 6))
-        recommendations.append(numbers)
-    return recommendations
-
-logic = st.selectbox("ロジックを選択", ["random", "high_freq"])
-if st.button("🔁 おすすめ数字を再生成"):
-    st.session_state.recommendations = generate_numbers(df_all, logic=logic)
-
-if "recommendations" not in st.session_state:
-    st.session_state.recommendations = generate_numbers(df_all)
-
-for i, nums in enumerate(st.session_state.recommendations, 1):
-    st.write(f"**口{i}：** {' '.join(map(str, nums))}")
-
-# --- PDF 保存 ---
-def save_recommendation_pdf(numbers_list):
-    os.makedirs("reports", exist_ok=True)
-    filename = f"reports/recommendation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    c = canvas.Canvas(filename, pagesize=A4)
-    pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
-
-    c.setFont("HeiseiKakuGo-W5", 16)
-    c.drawString(100, 800, "ロト6おすすめ数字（過去全データから）")
-
-    for i, nums in enumerate(numbers_list, 1):
-        c.drawString(100, 780 - i * 30, f"{i}口目： {' '.join(map(str, nums))}")
-
+    c.setFont('HeiseiKakuGo-W5', 12)
+    c.drawString(50, height - 90, "頻出数字トップ10：")
+    for i, (num, count) in enumerate(freq.head(10).items()):
+        c.drawString(60, height - 110 - i * 20, f"{i+1}位: {num}（{count}回）")
     c.save()
-    return filename
 
-if st.button("📥 PDF保存"):
-    pdf_file = save_recommendation_pdf(st.session_state.recommendations)
-    with open(pdf_file, "rb") as f:
-        st.download_button("おすすめ数字PDFをダウンロード", f, file_name=os.path.basename(pdf_file))
+# --- Streamlit UI ---
+st.title("🎯 ロト6 出現数字分析＆おすすめ生成")
+
+# --- 月選択とCSV読込 ---
+csv_folder = "data"
+csv_files = [f for f in os.listdir(csv_folder) if f.endswith(".csv")]
+months = sorted([f.replace(".csv", "") for f in csv_files], reverse=True)
+selected_month = st.selectbox("📅 表示したい月を選んでください", months)
+csv_path = os.path.join(csv_folder, f"{selected_month}.csv")
+
+if os.path.exists(csv_path):
+    df = read_csv_with_chardet(csv_path)
+    generate_pdf_report(df, selected_month)
+
+    st.subheader("📄 PDFレポート")
+    pdf_filename = f"{selected_month}_report.pdf"
+    if os.path.exists(pdf_filename):
+        with open(pdf_filename, "rb") as f:
+            b64_pdf = base64.b64encode(f.read()).decode("utf-8")
+            href = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{pdf_filename}">📥 ダウンロード：{pdf_filename}</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
+    # --- おすすめ数字生成 ---
+    st.subheader("🎲 おすすめ数字自動生成")
+    logic = st.selectbox("ロジックを選択", ["frequency", "random"])
+    if "recommendations" not in st.session_state:
+        st.session_state.recommendations = generate_numbers(df, logic=logic)
+
+    if st.button("🔁 再生成"):
+        st.session_state.recommendations = generate_numbers(df, logic=logic)
+
+    for i, nums in enumerate(st.session_state.recommendations):
+        st.write(f"{i+1}口目: {nums}")
+else:
+    st.warning("CSVファイルが見つかりませんでした。")
